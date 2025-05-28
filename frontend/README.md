@@ -1,36 +1,251 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Code Hero Frontend
 
-## Getting Started
+A modern, responsive frontend for the Code Hero AI agent platform built with Next.js 14, TypeScript, and Tailwind CSS.
 
-First, run the development server:
+## Features
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+- 🤖 **Real-time Agent Management** - Monitor and interact with your AI agents
+- 💬 **Advanced Chat Interface** - Seamless communication with AI agents
+- 📊 **Comprehensive Dashboard** - System health, metrics, and activity monitoring
+- ⚙️ **Settings Management** - User preferences, security, and system configuration
+- 🎨 **Modern UI/UX** - Apple-inspired design with glass morphism effects
+- 📱 **Responsive Design** - Works perfectly on desktop, tablet, and mobile
+
+## Tech Stack
+
+- **Framework**: Next.js 14 with App Router
+- **Language**: TypeScript
+- **Styling**: Tailwind CSS + DaisyUI
+- **Animations**: Framer Motion
+- **Icons**: Lucide React
+- **State Management**: React Hooks
+- **API Client**: Custom fetch-based client
+
+## Quick Start
+
+### Prerequisites
+
+- Node.js 18+ 
+- npm or yarn
+- Code Hero backend running (see backend README)
+
+### Installation
+
+1. **Clone and navigate to frontend**:
+   ```bash
+   cd frontend
+   ```
+
+2. **Install dependencies**:
+   ```bash
+   npm install
+   # or
+   yarn install
+   ```
+
+3. **Configure environment**:
+   ```bash
+   # Create environment file
+   cp .env.example .env.local
+   
+   # Edit .env.local and set your backend URL
+   NEXT_PUBLIC_API_URL=http://localhost:8000
+   ```
+
+4. **Start development server**:
+   ```bash
+   npm run dev
+   # or
+   yarn dev
+   ```
+
+5. **Open in browser**:
+   Navigate to [http://localhost:3000](http://localhost:3000)
+
+## Environment Configuration
+
+Create a `.env.local` file in the frontend directory:
+
+```env
+# Backend API URL - Update this to match your backend server
+NEXT_PUBLIC_API_URL=http://localhost:8000
+
+# Development settings
+NODE_ENV=development
+
+# Optional: Enable debug logging
+NEXT_PUBLIC_DEBUG=true
+
+# Optional: API timeout settings
+NEXT_PUBLIC_API_TIMEOUT=30000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Backend Connection
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+The frontend automatically connects to your Code Hero backend through the API client. Make sure:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+1. **Backend is running** on the configured URL (default: `http://localhost:8000`)
+2. **CORS is enabled** in your backend for the frontend domain
+3. **API endpoints** are accessible and responding
 
-## Learn More
+### API Endpoints Used
 
-To learn more about Next.js, take a look at the following resources:
+- `GET /health` - System health check
+- `POST /api/chat/` - Send chat messages
+- `GET /api/chat/{conversation_id}` - Get chat history
+- `GET /api/agents/` - List all agents
+- `GET /api/agents/{agent_id}` - Get specific agent
+- `POST /api/agents/{agent_id}/interact` - Interact with agent
+- `GET /api/agents/{agent_id}/history` - Get agent history
+- `GET /api/agents/statistics/overview` - Get agent statistics
+- `POST /multi-agent/coordinate` - Multi-agent task coordination
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Project Structure
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```
+frontend/
+├── src/
+│   ├── app/                 # Next.js App Router pages
+│   │   ├── dashboard/       # Dashboard page
+│   │   ├── agents/          # Agents management page
+│   │   ├── chat/            # Chat interface page
+│   │   ├── settings/        # Settings page
+│   │   └── layout.tsx       # Root layout
+│   ├── components/          # React components
+│   │   ├── layout/          # Layout components (Header, Sidebar, Footer)
+│   │   ├── ui/              # UI components (Button, Input, Cards, etc.)
+│   │   └── chat/            # Chat-specific components
+│   ├── hooks/               # Custom React hooks
+│   │   ├── useAgents.ts     # Agent management hook
+│   │   ├── useChat.ts       # Chat functionality hook
+│   │   └── useHealth.ts     # System health hook
+│   ├── utils/               # Utility functions
+│   │   └── api.ts           # API client and types
+│   └── styles/              # Global styles
+├── public/                  # Static assets
+└── package.json            # Dependencies and scripts
+```
 
-## Deploy on Vercel
+## Key Components
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Layout Components
+- **Header**: Navigation, user menu, system status
+- **Sidebar**: Main navigation with collapsible design
+- **Footer**: Links, social media, system information
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### UI Components
+- **GlassCard**: Apple-inspired glass morphism cards
+- **Button**: Consistent button styling with variants
+- **LoadingSpinner**: Multiple loading states and animations
+- **ErrorBoundary**: Comprehensive error handling
+- **Toast**: Notification system with multiple types
+
+### Feature Components
+- **ChatInterface**: Real-time chat with AI agents
+- **AgentCard**: Agent status and management
+- **MetricCard**: Dashboard metrics display
+- **SettingsPanel**: Configuration management
+
+## Development
+
+### Available Scripts
+
+```bash
+# Development server
+npm run dev
+
+# Production build
+npm run build
+
+# Start production server
+npm start
+
+# Type checking
+npm run type-check
+
+# Linting
+npm run lint
+
+# Linting with auto-fix
+npm run lint:fix
+```
+
+### Code Style
+
+The project follows these conventions:
+
+- **TypeScript**: Strict mode enabled
+- **ESLint**: Next.js recommended rules
+- **Prettier**: Consistent code formatting
+- **Component Structure**: Functional components with hooks
+- **File Naming**: kebab-case for files, PascalCase for components
+- **Import Order**: External libraries, internal modules, relative imports
+
+### Adding New Features
+
+1. **Create component** in appropriate directory
+2. **Add TypeScript interfaces** for props and data
+3. **Implement responsive design** with Tailwind CSS
+4. **Add error handling** and loading states
+5. **Update API client** if new endpoints needed
+6. **Add tests** for critical functionality
+
+## Deployment
+
+### Vercel (Recommended)
+
+1. **Connect repository** to Vercel
+2. **Set environment variables** in Vercel dashboard
+3. **Deploy** automatically on push to main branch
+
+### Manual Deployment
+
+```bash
+# Build for production
+npm run build
+
+# Start production server
+npm start
+```
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Backend Connection Failed**
+   - Check if backend is running on configured URL
+   - Verify CORS settings in backend
+   - Check network connectivity
+
+2. **Build Errors**
+   - Run `npm run type-check` to identify TypeScript issues
+   - Check for missing dependencies
+   - Verify environment variables
+
+3. **Styling Issues**
+   - Clear browser cache
+   - Check Tailwind CSS configuration
+   - Verify DaisyUI theme settings
+
+### Debug Mode
+
+Enable debug logging by setting `NEXT_PUBLIC_DEBUG=true` in your environment file.
+
+## Contributing
+
+1. **Fork the repository**
+2. **Create feature branch**: `git checkout -b feature/amazing-feature`
+3. **Commit changes**: `git commit -m 'Add amazing feature'`
+4. **Push to branch**: `git push origin feature/amazing-feature`
+5. **Open Pull Request**
+
+## License
+
+This project is part of the Code Hero AI platform. See the main repository for license information.
+
+## Support
+
+For support and questions:
+- Check the [main repository](../README.md) for general information
+- Review the [backend documentation](../src/README.md) for API details
+- Open an issue for bugs or feature requests

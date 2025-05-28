@@ -1,0 +1,107 @@
+version: '3.8'
+
+services:
+  # Code Hero Backend API
+  code-hero-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: code-hero-api
+    ports:
+      - "8000:8000"
+    environment:
+      # Required environment variables
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ASTRA_DB_ID=${ASTRA_DB_ID}
+      - ASTRA_DB_REGION=${ASTRA_DB_REGION}
+      - ASTRA_DB_APPLICATION_TOKEN=${ASTRA_DB_APPLICATION_TOKEN}
+      
+      # Optional API keys
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - TAVILY_API_KEY=${TAVILY_API_KEY:-}
+      
+      # LangSmith tracing (optional)
+      - LANGCHAIN_API_KEY=${LANGCHAIN_API_KEY:-}
+      - LANGCHAIN_TRACING_V2=${LANGCHAIN_TRACING_V2:-false}
+      - LANGCHAIN_PROJECT=${LANGCHAIN_PROJECT:-code-hero}
+      - LANGCHAIN_TRACING_ENDPOINT=${LANGCHAIN_TRACING_ENDPOINT:-}
+      
+      # Application configuration
+      - FASTAPI_ENV=production
+      - LOG_LEVEL=INFO
+      - PORT=8000
+      
+      # Hierarchical system configuration
+      - HIERARCHICAL_ROUTING_ENABLED=true
+      - HIERARCHICAL_DEBUG_MODE=false
+      - HIERARCHICAL_RECURSION_LIMIT=10
+    volumes:
+      - ./logs:/app/logs
+      - ./data:/app/data
+      - ./uploads:/app/uploads
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - code-hero-network
+
+  # Code Hero Frontend (Next.js)
+  code-hero-frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: code-hero-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - NODE_ENV=production
+    depends_on:
+      - code-hero-api
+    restart: unless-stopped
+    networks:
+      - code-hero-network
+
+  # Redis for caching and session management (optional)
+  redis:
+    image: redis:7-alpine
+    container_name: code-hero-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+    networks:
+      - code-hero-network
+    command: redis-server --appendonly yes
+
+  # Nginx reverse proxy (optional)
+  nginx:
+    image: nginx:alpine
+    container_name: code-hero-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - code-hero-api
+      - code-hero-frontend
+    restart: unless-stopped
+    networks:
+      - code-hero-network
+
+volumes:
+  redis-data:
+    driver: local
+
+networks:
+  code-hero-network:
+    driver: bridge 

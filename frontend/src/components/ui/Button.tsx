@@ -24,8 +24,12 @@ export const Button: React.FC<ButtonProps> = ({
   leftIcon,
   rightIcon,
   disabled,
-  ...props
+  onClick,
+  type,
+  form,
+  ...restProps
 }) => {
+
   const baseClasses = clsx(
     'relative overflow-hidden font-medium rounded-xl transition-all duration-300',
     'transform hover:scale-105 active:scale-95 focus:outline-none focus:ring-2',
@@ -55,12 +59,13 @@ export const Button: React.FC<ButtonProps> = ({
   };
 
   return (
-    <motion.button
-      whileHover={{ scale: disabled || isLoading ? 1 : 1.02 }}
-      whileTap={{ scale: disabled || isLoading ? 1 : 0.98 }}
+    <button
       className={clsx(baseClasses, variantClasses[variant], sizeClasses[size], className)}
       disabled={disabled || isLoading}
-      {...props}
+      onClick={onClick}
+      type={type}
+      form={form}
+      {...restProps}
     >
       {/* Shimmer effect for gradient buttons */}
       {(variant === 'primary' || variant === 'accent') && (
@@ -89,6 +94,6 @@ export const Button: React.FC<ButtonProps> = ({
           <span className="flex-shrink-0">{rightIcon}</span>
         )}
       </span>
-    </motion.button>
+    </button>
   );
 }; 

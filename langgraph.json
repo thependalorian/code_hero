@@ -1,0 +1,35 @@
+{
+  "dependencies": ["."],
+  "graphs": {
+    "hierarchical_system": "code_hero.hierarchical_agents:create_hierarchical_system"
+  },
+  "env": ".env",
+  "python_version": "3.11",
+  "dockerfile_lines": [
+    "RUN apt-get update && apt-get install -y git curl",
+    "COPY requirements.txt /tmp/requirements.txt",
+    "RUN pip install --no-cache-dir -r /tmp/requirements.txt"
+  ],
+  "store": {
+    "index": {
+      "embed": "openai:text-embedding-3-small",
+      "dims": 1536,
+      "fields": ["$"]
+    }
+  },
+  "config_schema": {
+    "type": "object",
+    "properties": {
+      "enable_human_feedback": {
+        "type": "boolean",
+        "default": true,
+        "description": "Enable human feedback in the hierarchical system"
+      },
+      "enable_memory": {
+        "type": "boolean", 
+        "default": true,
+        "description": "Enable memory management for the hierarchical system"
+      }
+    }
+  }
+} 

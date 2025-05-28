@@ -1,14 +1,14 @@
 """Structured logging for the backend system."""
 
-import logging
 import json
+import logging
 from datetime import datetime
-from typing import Any, Dict, Optional
 from pathlib import Path
+from typing import Any, Dict, Optional
 
 from .config import LoggingConfig
-from .state import BaseState
 from .interfaces import ServiceInterface
+from .state import BaseState
 
 
 class StructuredLogger(ServiceInterface):
@@ -22,22 +22,20 @@ class StructuredLogger(ServiceInterface):
 
         # Configure base logging
         logging.basicConfig(
-            level=config.level,
-            format=config.format,
-            filename=config.file
+            level=config.level, format=config.format, filename=config.file
         )
 
     async def initialize(self) -> None:
         """Initialize the logger."""
         if self._initialized:
             return
-            
+
         try:
             # Set up log directory if needed
             if self.config.file:
                 log_path = Path(self.config.file).parent
                 log_path.mkdir(parents=True, exist_ok=True)
-            
+
             self._initialized = True
             self.info("Logger initialized successfully")
         except Exception as e:
@@ -51,7 +49,7 @@ class StructuredLogger(ServiceInterface):
             for handler in self.logger.handlers:
                 handler.flush()
                 handler.close()
-            
+
             self._initialized = False
             self.info("Logger cleaned up successfully")
         except Exception as e:
@@ -64,7 +62,7 @@ class StructuredLogger(ServiceInterface):
             "initialized": self._initialized,
             "level": self.config.level,
             "has_file_handler": bool(self.config.file),
-            "handler_count": len(self.logger.handlers)
+            "handler_count": len(self.logger.handlers),
         }
 
     def log_event(
@@ -86,11 +84,11 @@ class StructuredLogger(ServiceInterface):
                 "event_type": event_type,
                 "data": event_data,
             }
-            
+
             if state:
                 log_entry["state_id"] = state.id
                 log_entry["state_type"] = state.__class__.__name__
-                
+
             self.logger.info(json.dumps(log_entry))
         except Exception as e:
             self.logger.error(f"Failed to log event: {e}")
@@ -107,7 +105,7 @@ class StructuredLogger(ServiceInterface):
                 "timestamp": datetime.utcnow().isoformat(),
                 "level": "INFO",
                 "message": message,
-                **kwargs
+                **kwargs,
             }
             self.logger.info(json.dumps(log_entry))
         except Exception as e:
@@ -125,7 +123,7 @@ class StructuredLogger(ServiceInterface):
                 "timestamp": datetime.utcnow().isoformat(),
                 "level": "ERROR",
                 "message": message,
-                **kwargs
+                **kwargs,
             }
             self.logger.error(json.dumps(log_entry))
         except Exception as e:
@@ -143,7 +141,7 @@ class StructuredLogger(ServiceInterface):
                 "timestamp": datetime.utcnow().isoformat(),
                 "level": "WARNING",
                 "message": message,
-                **kwargs
+                **kwargs,
             }
             self.logger.warning(json.dumps(log_entry))
         except Exception as e:
@@ -162,10 +160,10 @@ class StructuredLogger(ServiceInterface):
                 "level": "WARNING",
                 "message": message,
             }
-            
+
             if extra:
                 log_entry.update(extra)
-                
+
             self.logger.warning(json.dumps(log_entry))
         except Exception as e:
             self.logger.error(f"Failed to log warning: {e}")
@@ -182,7 +180,7 @@ class StructuredLogger(ServiceInterface):
                 "timestamp": datetime.utcnow().isoformat(),
                 "level": "DEBUG",
                 "message": message,
-                **kwargs
+                **kwargs,
             }
             self.logger.debug(json.dumps(log_entry))
         except Exception as e:
@@ -205,11 +203,11 @@ class StructuredLogger(ServiceInterface):
                 "error_type": error.__class__.__name__,
                 "error_message": str(error),
             }
-            
+
             if state:
                 log_entry["state_id"] = state.id
                 log_entry["state_type"] = state.__class__.__name__
-                
+
             self.logger.error(json.dumps(log_entry))
         except Exception as e:
             self.logger.error(f"Failed to log error: {e}")
@@ -287,15 +285,21 @@ class StructuredLogger(ServiceInterface):
         except Exception as e:
             self.logger.error(f"Failed to log metric: {e}")
 
-    async def __call__(self, event_type: str, event_data: Dict[str, Any], state: Optional[BaseState] = None, **kwargs: Any) -> None:
+    async def __call__(
+        self,
+        event_type: str,
+        event_data: Dict[str, Any],
+        state: Optional[BaseState] = None,
+        **kwargs: Any,
+    ) -> None:
         """Execute logging operation.
-        
+
         Args:
             event_type: Type of event to log
             event_data: Event data to log
             state: Optional state context
             **kwargs: Additional arguments
-            
+
         Raises:
             Exception: If logging fails
         """
@@ -305,6 +309,7 @@ class StructuredLogger(ServiceInterface):
         except Exception as e:
             self.logger.error(f"Logging operation failed: {e}")
             raise
+
 
 # Export all symbols
 __all__ = ["StructuredLogger"]

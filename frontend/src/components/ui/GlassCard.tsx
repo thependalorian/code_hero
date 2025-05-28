@@ -12,7 +12,6 @@ interface GlassCardProps {
   variant?: 'default' | 'dark' | 'light';
   padding?: 'none' | 'sm' | 'md' | 'lg' | 'xl';
   onClick?: () => void;
-  as?: 'div' | 'article' | 'section';
 }
 
 export const GlassCard: React.FC<GlassCardProps> = ({
@@ -22,8 +21,7 @@ export const GlassCard: React.FC<GlassCardProps> = ({
   glow = false,
   variant = 'default',
   padding = 'md',
-  onClick,
-  as: Component = 'div'
+  onClick
 }) => {
   const baseClasses = clsx(
     'rounded-2xl border transition-all duration-300',
@@ -85,30 +83,22 @@ export const GlassCard: React.FC<GlassCardProps> = ({
         className
       )}
       onClick={onClick}
-      role={onClick ? 'button' : undefined}
-      tabIndex={onClick ? 0 : undefined}
-      onKeyDown={onClick ? (e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          onClick();
-        }
-      } : undefined}
     >
       <div className="relative z-10">
         {children}
       </div>
       
-      {/* Subtle inner glow */}
       <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-white/5 to-transparent pointer-events-none" />
-      
-      {/* Border highlight */}
       <div className="absolute inset-0 rounded-2xl border border-white/10 pointer-events-none" />
     </motion.div>
   );
 };
 
 // Specialized card variants
-export const StatusCard: React.FC<GlassCardProps & { status: 'active' | 'processing' | 'error' | 'idle' }> = ({
+export const StatusCard: React.FC<Omit<GlassCardProps, 'children'> & { 
+  status: 'active' | 'processing' | 'error' | 'idle';
+  children?: React.ReactNode;
+}> = ({
   status,
   children,
   ...props
@@ -131,18 +121,20 @@ export const StatusCard: React.FC<GlassCardProps & { status: 'active' | 'process
   );
 };
 
-export const MetricCard: React.FC<GlassCardProps & { 
+export const MetricCard: React.FC<Omit<GlassCardProps, 'children'> & { 
   title: string;
   value: string | number;
   subtitle?: string;
   icon?: React.ReactNode;
   trend?: 'up' | 'down' | 'neutral';
+  children?: React.ReactNode;
 }> = ({
   title,
   value,
   subtitle,
   icon,
   trend,
+  children,
   ...props
 }) => {
   const trendColors = {
@@ -174,6 +166,7 @@ export const MetricCard: React.FC<GlassCardProps & {
           </div>
         )}
       </div>
+      {children}
     </GlassCard>
   );
 };

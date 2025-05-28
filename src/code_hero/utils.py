@@ -4,20 +4,19 @@ This module provides helper functions for tool execution, ID generation,
 file handling, and other common operations.
 """
 
-import os
-import uuid
-import logging
 import asyncio
 import functools
-import random
-import time
-from typing import Any, Dict, List, Optional, Union, Tuple, Callable, TypeVar, Type
-from pathlib import Path
 import json
+import logging
+import random
+import uuid
+from pathlib import Path
+from typing import Any, Callable, Dict, Union
 
 from .tools import tool_registry
 
 logger = logging.getLogger(__name__)
+
 
 async def call_tool(tool_name: str, **kwargs: Any) -> Dict[str, Any]:
     """Call a tool with error handling and logging.
@@ -37,7 +36,7 @@ async def call_tool(tool_name: str, **kwargs: Any) -> Dict[str, Any]:
             return {
                 "status": "error",
                 "response": f"Tool {tool_name} not found",
-                "error": f"Tool {tool_name} not found"
+                "error": f"Tool {tool_name} not found",
             }
 
         if asyncio.iscoroutinefunction(tool.run):
@@ -45,20 +44,13 @@ async def call_tool(tool_name: str, **kwargs: Any) -> Dict[str, Any]:
         else:
             result = await asyncio.to_thread(tool.run, **kwargs)
 
-        return {
-            "status": "success",
-            "response": result,
-            "error": None
-        }
+        return {"status": "success", "response": result, "error": None}
 
     except Exception as e:
         error_msg = f"Error executing tool {tool_name}: {str(e)}"
         logger.error(error_msg)
-        return {
-            "status": "error",
-            "response": error_msg,
-            "error": str(e)
-        }
+        return {"status": "error", "response": error_msg, "error": str(e)}
+
 
 def generate_id(prefix: str = "") -> str:
     """Generate a unique ID with optional prefix.
@@ -70,6 +62,7 @@ def generate_id(prefix: str = "") -> str:
         Unique ID string
     """
     return f"{prefix}_{uuid.uuid4()}" if prefix else str(uuid.uuid4())
+
 
 def retry_with_backoff(
     retries: int = 3, backoff_in_seconds: int = 1, max_backoff_in_seconds: int = 10
@@ -121,6 +114,7 @@ def retry_with_backoff(
 
     return decorator
 
+
 def safe_file_path(base_dir: Union[str, Path], filename: str) -> Path:
     """Create a safe file path within a base directory.
 
@@ -134,6 +128,7 @@ def safe_file_path(base_dir: Union[str, Path], filename: str) -> Path:
     base_path = Path(base_dir)
     safe_name = "".join(c for c in filename if c.isalnum() or c in "._- ")
     return base_path / safe_name
+
 
 def load_json_file(file_path: Union[str, Path]) -> Dict[str, Any]:
     """Load a JSON file safely.
@@ -150,6 +145,7 @@ def load_json_file(file_path: Union[str, Path]) -> Dict[str, Any]:
     except Exception as e:
         logger.error(f"Failed to load JSON file {file_path}: {e}")
         return {}
+
 
 def save_json_file(data: Dict[str, Any], file_path: Union[str, Path]) -> bool:
     """Save data to a JSON file safely.
@@ -168,6 +164,7 @@ def save_json_file(data: Dict[str, Any], file_path: Union[str, Path]) -> bool:
     except Exception as e:
         logger.error(f"Failed to save JSON file {file_path}: {e}")
         return False
+
 
 # Export all symbols
 __all__ = [

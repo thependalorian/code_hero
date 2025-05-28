@@ -4,67 +4,69 @@ This module provides the workflow runner that executes nodes in sequence,
 manages state transitions, and handles workflow lifecycle.
 """
 
-from typing import Dict, List, Optional, Type, Any, Tuple
 from datetime import datetime
-from enum import Enum
-import uuid
+from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field
 from langchain_core.tools import BaseTool
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
-from langchain_core.output_parsers import PydanticToolsParser
+
 
 # StreamWriter class for workflow updates
 class StreamWriter:
     """Stream writer for workflow updates."""
+
     async def write(self, data):
         """Write data to stream."""
-        pass
+
 
 try:
-    from langgraph.graph import StateGraph, START, END
     from langgraph.checkpoint.memory import MemorySaver
+    from langgraph.graph import END, START, StateGraph
     from langgraph.prebuilt import ToolNode, create_react_agent
+
     LANGGRAPH_AVAILABLE = True
 except ImportError:
     LANGGRAPH_AVAILABLE = False
-    
+
     class StateGraph:
         def __init__(self, *args, **kwargs):
             pass
+
         def add_node(self, *args, **kwargs):
             pass
+
         def add_edge(self, *args, **kwargs):
             pass
+
         def add_conditional_edges(self, *args, **kwargs):
             pass
+
         def compile(self, *args, **kwargs):
             return self
+
         # Note: No invoke method in fallback - this will raise AttributeError
 
     class MemorySaver:
         pass
-    
+
     class ToolNode:
         def __init__(self, tools):
             self.tools = tools
-    
+
     START = "start"
     END = "end"
-    
+
     def create_react_agent(*args, **kwargs):
         return None
 
-from langchain.agents import AgentExecutor
 
-from .state import Status, Workflow, AgentState, AgentRole, WorkflowState as StateWorkflowState
-from .context import managed_state
-from .tools import tool_registry
 from .agent_expert import execute_agent, experts
-from .prompts import build_prompt
+from .context import managed_state
 from .human_loop import request_human_feedback
+from .prompts import build_enhanced_prompt
+from .state import AgentRole, AgentState, Status, Workflow
+from .state import WorkflowState as StateWorkflowState
+from .tools import tool_registry
 from .utils import generate_id
-from .config import WorkflowConfig
 
 # Type aliases for workflow execution
 StateType = Dict[str, Any]
@@ -125,11 +127,24 @@ class WorkflowRunner:
                         id=f"{node_name}_{datetime.utcnow().timestamp()}",
                         agent=agent_role,
                         status=Status.RUNNING,
-                        context=current_state.dict() if hasattr(current_state, "dict") else current_state,
+                        context=(
+                            current_state.dict()
+                            if hasattr(current_state, "dict")
+                            else current_state
+                        ),
                     )
 
                     # Build prompt
-                    prompt = build_prompt(agent_role, agent_state)
+                    prompt = build_enhanced_prompt(
+                        agent_role=agent_role,
+                        context=agent_state.context,
+                        user_query=agent_state.context.get("query", ""),
+                        available_tools=(
+                            [tool.__name__ for tool in self._tools]
+                            if self._tools
+                            else []
+                        ),
+                    )
 
                     # Execute agent with tools
                     try:
@@ -138,9 +153,7 @@ class WorkflowRunner:
                             raise ValueError(f"No expert found for role {agent_role}")
 
                         result = await execute_agent(
-                            agent_role=agent_role,
-                            state=agent_state,
-                            prompt=prompt
+                            agent_role=agent_role, state=agent_state, prompt=prompt
                         )
 
                         # Handle tool calls
@@ -151,7 +164,7 @@ class WorkflowRunner:
                                 if tool:
                                     tool_result = await tool(**tool_call["args"])
                                     tool_results.append(tool_result)
-                            
+
                             # Update state with tool results
                             agent_state.artifacts["tool_results"] = tool_results
                             agent_state.status = Status.COMPLETED
@@ -208,11 +221,22 @@ class WorkflowRunner:
                     id=f"{node_name}_{datetime.utcnow().timestamp()}",
                     agent=agent_role,
                     status=Status.RUNNING,
-                    context=current_state.dict() if hasattr(current_state, "dict") else current_state,
+                    context=(
+                        current_state.dict()
+                        if hasattr(current_state, "dict")
+                        else current_state
+                    ),
                 )
 
                 # Build prompt
-                prompt = build_prompt(agent_role, agent_state)
+                prompt = build_enhanced_prompt(
+                    agent_role=agent_role,
+                    context=agent_state.context,
+                    user_query=agent_state.context.get("query", ""),
+                    available_tools=(
+                        [tool.__name__ for tool in self._tools] if self._tools else []
+                    ),
+                )
 
                 # Execute agent with tools
                 try:
@@ -221,9 +245,7 @@ class WorkflowRunner:
                         raise ValueError(f"No expert found for role {agent_role}")
 
                     result = await execute_agent(
-                        agent_role=agent_role,
-                        state=agent_state,
-                        prompt=prompt
+                        agent_role=agent_role, state=agent_state, prompt=prompt
                     )
 
                     # Handle tool calls
@@ -234,7 +256,7 @@ class WorkflowRunner:
                             if tool:
                                 tool_result = await tool(**tool_call["args"])
                                 tool_results.append(tool_result)
-                        
+
                         # Update state with tool results
                         agent_state.artifacts["tool_results"] = tool_results
                         agent_state.status = Status.COMPLETED
@@ -262,26 +284,39 @@ class WorkflowRunner:
 async def supervisor_node(state: StateType) -> StateType:
     """Supervisor node that routes tasks to appropriate agents."""
     task_description = state.get("context", {}).get("task", "")
-    
+
     # Analyze task to determine agent routing
-    if any(keyword in task_description.lower() for keyword in ["research", "search", "find", "analyze"]):
+    if any(
+        keyword in task_description.lower()
+        for keyword in ["research", "search", "find", "analyze"]
+    ):
         state["next_agent"] = "research_agent"
         state["task_type"] = "research"
-    elif any(keyword in task_description.lower() for keyword in ["write", "document", "content", "blog"]):
+    elif any(
+        keyword in task_description.lower()
+        for keyword in ["write", "document", "content", "blog"]
+    ):
         state["next_agent"] = "writer_agent"
         state["task_type"] = "writing"
-    elif any(keyword in task_description.lower() for keyword in ["code", "implement", "develop", "program"]):
+    elif any(
+        keyword in task_description.lower()
+        for keyword in ["code", "implement", "develop", "program"]
+    ):
         state["next_agent"] = "coding_agent"
         state["task_type"] = "coding"
-    elif any(keyword in task_description.lower() for keyword in ["review", "check", "validate", "test"]):
+    elif any(
+        keyword in task_description.lower()
+        for keyword in ["review", "check", "validate", "test"]
+    ):
         state["next_agent"] = "review_agent"
         state["task_type"] = "review"
     else:
         state["next_agent"] = "research_agent"
         state["task_type"] = "research"
-    
+
     state["status"] = Status.RUNNING
     return state
+
 
 async def research_agent_node(state: StateType) -> StateType:
     """Research agent specialized for information gathering with tool binding."""
@@ -290,7 +325,7 @@ async def research_agent_node(state: StateType) -> StateType:
         research_tools = tool_registry.get_tools_by_category("research")
         if not research_tools:
             research_tools = [tool_registry.get_tool("search_documents")]
-        
+
         expert = experts.get(AgentRole.RESEARCH)
         if expert:
             agent_state = AgentState(
@@ -299,23 +334,32 @@ async def research_agent_node(state: StateType) -> StateType:
                 status=Status.RUNNING,
                 context=state.get("context", {}),
             )
-            
+
             # Bind tools to the agent
-            if hasattr(expert, 'bind_tools'):
+            if hasattr(expert, "bind_tools"):
                 expert.bind_tools(research_tools)
-            
+
             result = await execute_agent(
                 agent_role=AgentRole.RESEARCH,
                 state=agent_state,
-                prompt=build_prompt(AgentRole.RESEARCH, agent_state)
+                prompt=build_enhanced_prompt(
+                    agent_role=AgentRole.RESEARCH,
+                    context=agent_state.context,
+                    user_query=agent_state.context.get("query", ""),
+                    available_tools=(
+                        [tool.__name__ for tool in research_tools]
+                        if research_tools
+                        else []
+                    ),
+                ),
             )
-            
+
             # Handle tool calls if present
             if isinstance(result, AgentState) and result.artifacts:
                 state["artifacts"]["research_results"] = result.artifacts
             else:
                 state["artifacts"]["research_results"] = result
-                
+
             state["status"] = Status.COMPLETED
             state["needs_review"] = True
         else:
@@ -324,8 +368,9 @@ async def research_agent_node(state: StateType) -> StateType:
     except Exception as e:
         state["status"] = Status.FAILED
         state["error"] = str(e)
-    
+
     return state
+
 
 async def writer_agent_node(state: StateType) -> StateType:
     """Writer agent specialized for content creation with tool binding."""
@@ -333,8 +378,10 @@ async def writer_agent_node(state: StateType) -> StateType:
         # Get available tools for writing
         writing_tools = tool_registry.get_tools_by_category("content")
         if not writing_tools:
-            writing_tools = [tool_registry.get_tool("generate_code")]  # Can be used for content generation
-        
+            writing_tools = [
+                tool_registry.get_tool("generate_code")
+            ]  # Can be used for content generation
+
         # Use prompt engineer for enhanced writing prompts
         prompt_expert = experts.get(AgentRole.PROMPT_ENGINEER)
         if prompt_expert:
@@ -343,44 +390,65 @@ async def writer_agent_node(state: StateType) -> StateType:
                 id=f"prompt_{datetime.utcnow().timestamp()}",
                 agent=AgentRole.PROMPT_ENGINEER,
                 status=Status.RUNNING,
-                context={"task": "Create writing prompt for: " + str(state.get("context", {}))},
+                context={
+                    "task": "Create writing prompt for: "
+                    + str(state.get("context", {}))
+                },
             )
-            
+
             enhanced_prompt = await execute_agent(
                 agent_role=AgentRole.PROMPT_ENGINEER,
                 state=prompt_state,
-                prompt=build_prompt(AgentRole.PROMPT_ENGINEER, prompt_state)
+                prompt=build_enhanced_prompt(
+                    agent_role=AgentRole.PROMPT_ENGINEER,
+                    context=prompt_state.context,
+                    user_query=prompt_state.context.get("query", ""),
+                    available_tools=(
+                        [tool.__name__ for tool in writing_tools]
+                        if writing_tools
+                        else []
+                    ),
+                ),
             )
-            
+
             # Use enhanced prompt for writing
             state["artifacts"]["enhanced_prompt"] = enhanced_prompt
-        
+
         # Execute writing task (using NextJS expert as writer for now)
         expert = experts.get(AgentRole.NEXTJS_EXPERT)
         if expert:
             # Bind tools to the agent
-            if hasattr(expert, 'bind_tools'):
+            if hasattr(expert, "bind_tools"):
                 expert.bind_tools(writing_tools)
-                
+
             agent_state = AgentState(
                 id=f"writer_{datetime.utcnow().timestamp()}",
                 agent=AgentRole.NEXTJS_EXPERT,
                 status=Status.RUNNING,
                 context=state.get("context", {}),
             )
-            
+
             result = await execute_agent(
                 agent_role=AgentRole.NEXTJS_EXPERT,
                 state=agent_state,
-                prompt=build_prompt(AgentRole.NEXTJS_EXPERT, agent_state)
+                prompt=build_enhanced_prompt(
+                    agent_role=AgentRole.NEXTJS_EXPERT,
+                    context=agent_state.context,
+                    user_query=agent_state.context.get("query", ""),
+                    available_tools=(
+                        [tool.__name__ for tool in writing_tools]
+                        if writing_tools
+                        else []
+                    ),
+                ),
             )
-            
+
             # Handle tool calls if present
             if isinstance(result, AgentState) and result.artifacts:
                 state["artifacts"]["written_content"] = result.artifacts
             else:
                 state["artifacts"]["written_content"] = result
-                
+
             state["status"] = Status.COMPLETED
             state["needs_review"] = True
         else:
@@ -389,8 +457,9 @@ async def writer_agent_node(state: StateType) -> StateType:
     except Exception as e:
         state["status"] = Status.FAILED
         state["error"] = str(e)
-    
+
     return state
+
 
 async def coding_agent_node(state: StateType) -> StateType:
     """Coding agent specialized for software development with tool binding."""
@@ -399,13 +468,13 @@ async def coding_agent_node(state: StateType) -> StateType:
         coding_tools = [
             tool_registry.get_tool("generate_code"),
             tool_registry.get_tool("validate_code"),
-            tool_registry.get_tool("analyze_code")
+            tool_registry.get_tool("analyze_code"),
         ]
         coding_tools = [tool for tool in coding_tools if tool is not None]
-        
+
         # Determine coding specialization
         task = state.get("context", {}).get("task", "")
-        
+
         if "fastapi" in task.lower() or "api" in task.lower():
             expert = experts.get(AgentRole.FASTAPI_EXPERT)
             agent_role = AgentRole.FASTAPI_EXPERT
@@ -415,31 +484,38 @@ async def coding_agent_node(state: StateType) -> StateType:
         else:
             expert = experts.get(AgentRole.LANGCHAIN_EXPERT)
             agent_role = AgentRole.LANGCHAIN_EXPERT
-        
+
         if expert:
             # Bind tools to the agent
-            if hasattr(expert, 'bind_tools'):
+            if hasattr(expert, "bind_tools"):
                 expert.bind_tools(coding_tools)
-                
+
             agent_state = AgentState(
                 id=f"coding_{datetime.utcnow().timestamp()}",
                 agent=agent_role,
                 status=Status.RUNNING,
                 context=state.get("context", {}),
             )
-            
+
             result = await execute_agent(
                 agent_role=agent_role,
                 state=agent_state,
-                prompt=build_prompt(agent_role, agent_state)
+                prompt=build_enhanced_prompt(
+                    agent_role=agent_role,
+                    context=agent_state.context,
+                    user_query=agent_state.context.get("query", ""),
+                    available_tools=(
+                        [tool.__name__ for tool in coding_tools] if coding_tools else []
+                    ),
+                ),
             )
-            
+
             # Handle tool calls if present
             if isinstance(result, AgentState) and result.artifacts:
                 state["artifacts"]["code_output"] = result.artifacts
             else:
                 state["artifacts"]["code_output"] = result
-                
+
             state["status"] = Status.COMPLETED
             state["needs_review"] = True
         else:
@@ -448,8 +524,9 @@ async def coding_agent_node(state: StateType) -> StateType:
     except Exception as e:
         state["status"] = Status.FAILED
         state["error"] = str(e)
-    
+
     return state
+
 
 async def review_agent_node(state: StateType) -> StateType:
     """Review agent for quality assurance with tool binding."""
@@ -457,43 +534,50 @@ async def review_agent_node(state: StateType) -> StateType:
         # Get available tools for review
         review_tools = [
             tool_registry.get_tool("validate_code"),
-            tool_registry.get_tool("analyze_code")
+            tool_registry.get_tool("analyze_code"),
         ]
         review_tools = [tool for tool in review_tools if tool is not None]
-        
+
         # Use LangChain expert for review tasks
         expert = experts.get(AgentRole.LANGCHAIN_EXPERT)
         if expert:
             # Bind tools to the agent
-            if hasattr(expert, 'bind_tools'):
+            if hasattr(expert, "bind_tools"):
                 expert.bind_tools(review_tools)
-                
+
             # Prepare review context
             review_context = {
                 "task": "Review and validate the following work:",
                 "artifacts": state.get("artifacts", {}),
-                "original_context": state.get("context", {})
+                "original_context": state.get("context", {}),
             }
-            
+
             agent_state = AgentState(
                 id=f"review_{datetime.utcnow().timestamp()}",
                 agent=AgentRole.LANGCHAIN_EXPERT,
                 status=Status.RUNNING,
                 context=review_context,
             )
-            
+
             result = await execute_agent(
                 agent_role=AgentRole.LANGCHAIN_EXPERT,
                 state=agent_state,
-                prompt=build_prompt(AgentRole.LANGCHAIN_EXPERT, agent_state)
+                prompt=build_enhanced_prompt(
+                    agent_role=AgentRole.LANGCHAIN_EXPERT,
+                    context=agent_state.context,
+                    user_query=agent_state.context.get("query", ""),
+                    available_tools=(
+                        [tool.__name__ for tool in review_tools] if review_tools else []
+                    ),
+                ),
             )
-            
+
             # Handle tool calls if present
             if isinstance(result, AgentState) and result.artifacts:
                 state["artifacts"]["review_results"] = result.artifacts
             else:
                 state["artifacts"]["review_results"] = result
-                
+
             state["status"] = Status.COMPLETED
             state["needs_feedback"] = True  # Request human feedback after review
         else:
@@ -502,15 +586,16 @@ async def review_agent_node(state: StateType) -> StateType:
     except Exception as e:
         state["status"] = Status.FAILED
         state["error"] = str(e)
-    
+
     return state
+
 
 def create_tool_node(tools: List[BaseTool]) -> ToolNode:
     """Create a tool node for LangGraph with proper tool binding.
-    
+
     Args:
         tools: List of tools to bind
-        
+
     Returns:
         Configured tool node
     """
@@ -521,16 +606,17 @@ def create_tool_node(tools: List[BaseTool]) -> ToolNode:
         class FallbackToolNode:
             def __init__(self, tools):
                 self.tools = tools
-                
+
             async def __call__(self, state):
                 # Simple fallback - just return the state
                 return state
-        
+
         return FallbackToolNode(tools)
+
 
 def create_workflow_graph() -> StateGraph:
     """Create a multi-agent workflow graph with specialized agents.
-    
+
     Returns:
         Compiled workflow graph with proper agent coordination
     """
@@ -583,7 +669,7 @@ def create_workflow_graph() -> StateGraph:
 
     # Add edges
     graph.add_edge(START, "supervisor")
-    
+
     # Supervisor routes to specialized agents
     graph.add_conditional_edges(
         "supervisor",
@@ -592,8 +678,8 @@ def create_workflow_graph() -> StateGraph:
             "research_agent": "research_agent",
             "writer_agent": "writer_agent",
             "coding_agent": "coding_agent",
-            "review_agent": "review_agent"
-        }
+            "review_agent": "review_agent",
+        },
     )
 
     # Agent completion routing
@@ -604,18 +690,15 @@ def create_workflow_graph() -> StateGraph:
             {
                 "request_feedback": "request_feedback",
                 "review_agent": "review_agent",
-                "end": "end"
-            }
+                "end": "end",
+            },
         )
 
     # Review agent routing
     graph.add_conditional_edges(
         "review_agent",
         should_request_feedback,
-        {
-            "request_feedback": "request_feedback",
-            "end": "end"
-        }
+        {"request_feedback": "request_feedback", "end": "end"},
     )
 
     # Feedback routing
@@ -625,8 +708,8 @@ def create_workflow_graph() -> StateGraph:
         {
             "review_agent": "review_agent",
             "request_feedback": "request_feedback",
-            "end": "end"
-        }
+            "end": "end",
+        },
     )
 
     graph.add_edge("end", END)
@@ -638,15 +721,15 @@ async def workflow_runner(
     initial_state: StateType,
     *,
     previous: Optional[Dict[str, Any]] = None,
-    writer: Optional[StreamWriter] = None
+    writer: Optional[StreamWriter] = None,
 ) -> Dict[str, Any]:
     """Execute workflow with proper LangGraph invoke method.
-    
+
     Args:
         initial_state: Initial workflow state
         previous: Optional previous state for resumption
         writer: Optional stream writer
-        
+
     Returns:
         Final workflow state
     """
@@ -658,17 +741,14 @@ async def workflow_runner(
             "context": initial_state.get("context", {}),
             "artifacts": initial_state.get("artifacts", {}),
             "start_time": datetime.utcnow(),
-            "error": None
+            "error": None,
         }
 
         if previous:
             state.update(previous)
 
         if writer:
-            await writer.write({
-                "type": "workflow_start",
-                "data": {"state": state}
-            })
+            await writer.write({"type": "workflow_start", "data": {"state": state}})
 
         # Check if LangGraph is available
         if not LANGGRAPH_AVAILABLE:
@@ -676,73 +756,59 @@ async def workflow_runner(
             return {
                 "status": Status.COMPLETED,
                 "result": state,
-                "message": "LangGraph not available, using fallback execution"
+                "message": "LangGraph not available, using fallback execution",
             }
 
         # Get workflow graph
         graph = create_workflow_graph()
-        
+
         # Execute workflow using invoke method with proper configuration
         try:
             # Prepare configuration for checkpointer
-            config = {
-                "configurable": {
-                    "thread_id": state.get("id", "default")
-                }
-            }
-            
+            config = {"configurable": {"thread_id": state.get("id", "default")}}
+
             # Use invoke method which is the standard LangGraph execution method
             final_state = graph.invoke(state, config=config)
-            
-            if writer:
-                await writer.write({
-                    "type": "workflow_complete",
-                    "data": {"result": final_state}
-                })
 
-            return {
-                "status": Status.COMPLETED,
-                "result": final_state
-            }
+            if writer:
+                await writer.write(
+                    {"type": "workflow_complete", "data": {"result": final_state}}
+                )
+
+            return {"status": Status.COMPLETED, "result": final_state}
 
         except AttributeError as e:
             if "invoke" in str(e):
                 # Handle case where invoke method is not available
                 if writer:
-                    await writer.write({
-                        "type": "workflow_error",
-                        "data": {"error": f"LangGraph invoke method not available: {str(e)}"}
-                    })
+                    await writer.write(
+                        {
+                            "type": "workflow_error",
+                            "data": {
+                                "error": f"LangGraph invoke method not available: {str(e)}"
+                            },
+                        }
+                    )
                 return {
                     "status": Status.FAILED,
                     "error": f"LangGraph invoke method not available: {str(e)}",
-                    "fallback_result": state
+                    "fallback_result": state,
                 }
             else:
                 raise
         except Exception as e:
             if writer:
-                await writer.write({
-                    "type": "workflow_error",
-                    "data": {"error": str(e)}
-                })
+                await writer.write(
+                    {"type": "workflow_error", "data": {"error": str(e)}}
+                )
             state["status"] = Status.FAILED
             state["error"] = str(e)
-            return {
-                "status": Status.FAILED,
-                "error": str(e)
-            }
+            return {"status": Status.FAILED, "error": str(e)}
 
     except Exception as e:
         if writer:
-            await writer.write({
-                "type": "workflow_error",
-                "data": {"error": str(e)}
-            })
-        return {
-            "status": Status.FAILED,
-            "error": str(e)
-        }
+            await writer.write({"type": "workflow_error", "data": {"error": str(e)}})
+        return {"status": Status.FAILED, "error": str(e)}
 
 
 # Export all symbols

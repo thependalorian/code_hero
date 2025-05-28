@@ -7,58 +7,47 @@ feedback collection from human operators.
 Key Components:
     - HumanLoopManager: Main class for managing human interactions
     - request_human_feedback: Function for human task handling
-    - HumanFeedbackRequest: Model for feedback requests
-    - HumanFeedbackResponse: Model for feedback responses
 """
 
-from typing import Optional, Dict, Any, List
 from datetime import datetime
-from pydantic import BaseModel
+from typing import Any, Dict, List, Optional
 
 try:
     from langgraph.func import task
     from langgraph.types import StreamWriter, interrupt
+
     LANGGRAPH_AVAILABLE = True
 except ImportError:
     # Fallback for older LangGraph versions
     LANGGRAPH_AVAILABLE = False
+
     def task():
         def decorator(func):
             return func
+
         return decorator
-    
+
     class StreamWriter:
         async def write(self, data):
             pass
-    
+
     def interrupt(data):
         return data
 
-from .state import Status, TaskState, StateType
+
 from .interfaces import ServiceInterface
+from .state import (
+    HumanFeedbackRequest,
+    HumanFeedbackResponse,
+    StateType,
+    Status,
+    TaskState,
+)
 
-class HumanFeedbackRequest(BaseModel):
-    """Model for human feedback requests."""
-
-    project_id: str
-    task_id: str
-    reason: str
-    context: Dict[str, Any] = {}
-    deadline: Optional[datetime] = None
-    priority: str = "normal"
-
-class HumanFeedbackResponse(BaseModel):
-    """Model for human feedback responses."""
-    
-    request_id: str
-    feedback: str
-    approved: bool
-    comments: Optional[str] = None
-    timestamp: datetime = datetime.utcnow()
 
 class HumanLoopManager(ServiceInterface):
     """Manager for human-in-the-loop interactions.
-    
+
     This class handles:
         - Managing feedback requests
         - Notifying human operators
@@ -71,33 +60,33 @@ class HumanLoopManager(ServiceInterface):
         self._initialized = False
         self._pending_requests: Dict[str, HumanFeedbackRequest] = {}
         self._completed_requests: Dict[str, HumanFeedbackResponse] = {}
-        
+
     async def initialize(self) -> None:
         """Initialize the manager."""
         if self._initialized:
             return
-            
+
         # Clear request queues
         self._pending_requests.clear()
         self._completed_requests.clear()
-        
+
         self._initialized = True
-        
+
     async def cleanup(self) -> None:
         """Clean up manager resources."""
         # Archive pending requests
         self._pending_requests.clear()
         self._completed_requests.clear()
         self._initialized = False
-        
+
     async def check_health(self) -> dict:
         """Check manager health status."""
         return {
             "initialized": self._initialized,
             "pending_requests": len(self._pending_requests),
-            "completed_requests": len(self._completed_requests)
+            "completed_requests": len(self._completed_requests),
         }
-        
+
     async def __call__(
         self,
         project_id: str,
@@ -105,7 +94,7 @@ class HumanLoopManager(ServiceInterface):
         reason: str,
         context: Optional[Dict[str, Any]] = None,
         deadline: Optional[datetime] = None,
-        **kwargs: Any
+        **kwargs: Any,
     ) -> HumanFeedbackRequest:
         """Execute human loop operation.
 
@@ -119,7 +108,7 @@ class HumanLoopManager(ServiceInterface):
 
         Returns:
             Created feedback request
-            
+
         Raises:
             Exception: If operation fails
         """
@@ -130,9 +119,9 @@ class HumanLoopManager(ServiceInterface):
                 task=task,
                 reason=reason,
                 context=context,
-                deadline=deadline
+                deadline=deadline,
             )
-        except Exception as e:
+        except Exception:
             # Note: Logger should be injected if needed for production use
             raise
 
@@ -150,16 +139,16 @@ class HumanLoopManager(ServiceInterface):
             task_id=task.id,
             reason=reason,
             context=context or {},
-                deadline=deadline,
+            deadline=deadline,
         )
-        
+
         self._pending_requests[request.task_id] = request
         return request
-        
+
     async def get_pending_requests(self) -> List[HumanFeedbackRequest]:
         """Get all pending feedback requests."""
         return list(self._pending_requests.values())
-        
+
     async def submit_response(
         self,
         request_id: str,
@@ -169,7 +158,7 @@ class HumanLoopManager(ServiceInterface):
     ) -> HumanFeedbackResponse:
         """Submit a response to a feedback request."""
         if request_id not in self._pending_requests:
-                raise ValueError(f"Request {request_id} not found")
+            raise ValueError(f"Request {request_id} not found")
 
         response = HumanFeedbackResponse(
             request_id=request_id,
@@ -181,46 +170,49 @@ class HumanLoopManager(ServiceInterface):
         # Move request from pending to completed
         del self._pending_requests[request_id]
         self._completed_requests[request_id] = response
-        
+
         return response
-        
+
     async def get_response(self, request_id: str) -> Optional[HumanFeedbackResponse]:
         """Get the response for a request if available."""
         return self._completed_requests.get(request_id)
 
+
 @task()
 async def request_human_feedback(
-    state: StateType,
-    *,
-    writer: Optional[StreamWriter] = None
+    state: StateType, *, writer: Optional[StreamWriter] = None
 ) -> StateType:
     """Request human feedback using LangGraph interrupt.
-    
+
     Args:
         state: Current workflow state
         writer: Optional stream writer
-        
+
     Returns:
         Updated workflow state with feedback
     """
     try:
         if writer:
-            await writer.write({
-                "type": "feedback_requested",
-                "data": {
-                    "state_id": state.get("id"),
-                    "context": state.get("context"),
-                    "artifacts": state.get("artifacts")
+            await writer.write(
+                {
+                    "type": "feedback_requested",
+                    "data": {
+                        "state_id": state.get("id"),
+                        "context": state.get("context"),
+                        "artifacts": state.get("artifacts"),
+                    },
                 }
-            })
+            )
 
         # Request feedback via interrupt
-        feedback = interrupt({
-            "state_id": state.get("id"),
-            "prompt": state.get("context", {}).get("prompt", ""),
-            "context": state.get("context", {}),
-            "artifacts": state.get("artifacts", {})
-        })
+        feedback = interrupt(
+            {
+                "state_id": state.get("id"),
+                "prompt": state.get("context", {}).get("prompt", ""),
+                "context": state.get("context", {}),
+                "artifacts": state.get("artifacts", {}),
+            }
+        )
 
         # Update state with feedback
         state["context"]["human_feedback"] = feedback
@@ -228,27 +220,24 @@ async def request_human_feedback(
         state["status"] = Status.COMPLETED
 
         if writer:
-            await writer.write({
-                "type": "feedback_received",
-                "data": {"feedback": feedback}
-            })
+            await writer.write(
+                {"type": "feedback_received", "data": {"feedback": feedback}}
+            )
 
         return state
 
     except Exception as e:
         if writer:
-            await writer.write({
-                "type": "feedback_error",
-                "data": {"error": str(e)}
-            })
+            await writer.write({"type": "feedback_error", "data": {"error": str(e)}})
         state["status"] = Status.FAILED
         state["error"] = str(e)
         return state
+
 
 # Export all symbols
 __all__ = [
     "HumanLoopManager",
     "request_human_feedback",
     "HumanFeedbackRequest",
-    "HumanFeedbackResponse"
+    "HumanFeedbackResponse",
 ]

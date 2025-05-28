@@ -1,0 +1,56 @@
+# Production configuration
+# Use: docker-compose -f docker-compose.yml -f docker-compose.prod.yml up
+version: '3.8'
+
+services:
+  code-hero-api:
+    build:
+      target: production
+    environment:
+      - FASTAPI_ENV=production
+      - LOG_LEVEL=INFO
+      - HIERARCHICAL_DEBUG_MODE=false
+    restart: always
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    
+  code-hero-frontend:
+    environment:
+      - NODE_ENV=production
+    restart: always
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+
+  # Enable nginx in production
+  nginx:
+    profiles: []
+    restart: always
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 128M
+
+  redis:
+    restart: always
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256M 
